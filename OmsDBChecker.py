@@ -106,7 +106,7 @@ class OmsChecker(ScheduleRunner):
             return
         latest_order = l_order_books[-1]
         self.logger.info(f'最新Order, '
-                         f'{latest_order.CreateTime.strftime("%Y%m%d %H%M%S")}, '
+                         f'{latest_order.CreateTime.strftime("%Y-%m-%d %H:%M:%S")}, '
                          f'{latest_order.Trader}, '
                          f'{latest_order.Ticker}, '
                          f'{str(Direction(latest_order.Direction).name)}, '
@@ -134,7 +134,7 @@ class OmsChecker(ScheduleRunner):
                     f'{order.Trader}, {order.Ticker}, '
                     f'{str(Direction(order.Direction).name)}, '
                     f'{str(order.Volume)}, {str(order.LimitPrice)}, '
-                    f'{order.CreateTime.strftime("%Y%m%d %H%M%S")}'
+                    f'{order.CreateTime.strftime("%Y-%m-%d %H:%M:%S")}'
                 )
             # 弹框报警
             self.warning('订单长时间未成交或撤单')
