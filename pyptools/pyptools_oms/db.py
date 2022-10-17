@@ -7,9 +7,10 @@ from typing import Dict, List
 from collections import defaultdict
 from enum import Enum
 from datetime import datetime, date
+import os
 
 from sqlalchemy import Column, String, Integer, Date, Float, ForeignKey, DateTime
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
@@ -26,7 +27,12 @@ class Direction(Enum):
     Short = -1
 
 
+def to_dict(self):
+    return {c.name: getattr(self, c.name, None) for c in self.__table__.columns}
+
+
 Base = declarative_base()  # 创建对象的基类
+Base.to_dict = to_dict
 
 
 class Order(Base):  # 定义一个类，继承Base
@@ -55,29 +61,31 @@ class Order(Base):  # 定义一个类，继承Base
     IsBatchOrder = Column(String(64))
 
     def __repr__(self):
-        return f'<Order(InternalId={self.InternalId}, ExternalId={self.ExternalId}, ' \
-               f'Account={self.Account}, Trader={self.Trader}, ' \
-               f'Ticker={self.Ticker}, Direction={self.Direction}, ' \
-               f'LimitPrice={str(self.LimitPrice)}, Volume={str(self.Volume)}, ' \
-               f'OrderStatus={self.OrderStatus}, OrderType={self.OrderType},  ' \
-               f'TradedPrice={str(self.TradedPrice)}, TradedVolume={str(self.TradedVolume)},  ' \
-               f'HedgeFlag={self.HedgeFlag}, OffsetFlag={self.OffsetFlag},  ' \
-               f'Remark={self.Remark}, BatchId={self.BatchId}, IsBatchOrder={self.IsBatchOrder}, ' \
-               f'CreateTime={str(self.CreateTime)}, UpdateTime={str(self.UpdateTime)},' \
-               f'CacheTime={str(self.CacheTime)}, FillingTime={str(self.FillingTime)})>'
+        # return f'<Order(InternalId={self.InternalId}, ExternalId={self.ExternalId}, ' \
+        #        f'Account={self.Account}, Trader={self.Trader}, ' \
+        #        f'Ticker={self.Ticker}, Direction={self.Direction}, ' \
+        #        f'LimitPrice={str(self.LimitPrice)}, Volume={str(self.Volume)}, ' \
+        #        f'OrderStatus={self.OrderStatus}, OrderType={self.OrderType},  ' \
+        #        f'TradedPrice={str(self.TradedPrice)}, TradedVolume={str(self.TradedVolume)},  ' \
+        #        f'HedgeFlag={self.HedgeFlag}, OffsetFlag={self.OffsetFlag},  ' \
+        #        f'Remark={self.Remark}, BatchId={self.BatchId}, IsBatchOrder={self.IsBatchOrder}, ' \
+        #        f'CreateTime={str(self.CreateTime)}, UpdateTime={str(self.UpdateTime)},' \
+        #        f'CacheTime={str(self.CacheTime)}, FillingTime={str(self.FillingTime)})>'
+        return f'<Order, {str(self.to_dict())}>'
 
     def __str__(self):
-        return ','.join(str(_) for _ in [
-            self.InternalId, self.ExternalId,
-            self.Account, self.Trader, self.Ticker, self.Direction,
-            self.LimitPrice, self.Volume,
-            self.OrderStatus, self.OrderType,
-            str(self.TradedPrice), str(self.TradedVolume),
-            self.HedgeFlag, self.OffsetFlag,
-            self.Remark, self.BatchId, self.IsBatchOrder,
-            str(self.CreateTime), str(self.UpdateTime),
-            str(self.CacheTime), str(self.FillingTime)
-        ])
+        # return ','.join(str(_) for _ in [
+        #     self.InternalId, self.ExternalId,
+        #     self.Account, self.Trader, self.Ticker, self.Direction,
+        #     self.LimitPrice, self.Volume,
+        #     self.OrderStatus, self.OrderType,
+        #     str(self.TradedPrice), str(self.TradedVolume),
+        #     self.HedgeFlag, self.OffsetFlag,
+        #     self.Remark, self.BatchId, self.IsBatchOrder,
+        #     str(self.CreateTime), str(self.UpdateTime),
+        #     str(self.CacheTime), str(self.FillingTime)
+        # ])
+        return str(self.to_dict())
 
 
 class OrderLogs(Base):  # 定义一个类，继承Base
@@ -107,16 +115,20 @@ class OrderLogs(Base):  # 定义一个类，继承Base
     IsBatchOrder = Column(String(64))
 
     def __repr__(self):
-        return f'<Order(InternalId={self.InternalId}, ExternalId={self.ExternalId}, ' \
-               f'Account={self.Account}, Trader={self.Trader}, ' \
-               f'Ticker={self.Ticker}, Direction={self.Direction}, ' \
-               f'LimitPrice={str(self.LimitPrice)}, Volume={str(self.Volume)}, ' \
-               f'OrderStatus={self.OrderStatus}, OrderType={self.OrderType}, ' \
-               f'TradedPrice={str(self.TradedPrice)}, TradedVolume={str(self.TradedVolume)}, ' \
-               f'HedgeFlag={self.HedgeFlag}, OffsetFlag={self.OffsetFlag}, ' \
-               f'Remark={self.Remark}, BatchId={self.BatchId}, IsBatchOrder={self.IsBatchOrder}, ' \
-               f'CreateTime={str(self.CreateTime)}, UpdateTime={str(self.UpdateTime)},' \
-               f'CacheTime={str(self.CacheTime)}, FillingTime={str(self.FillingTime)})>'
+        # return f'<Order(InternalId={self.InternalId}, ExternalId={self.ExternalId}, ' \
+        #        f'Account={self.Account}, Trader={self.Trader}, ' \
+        #        f'Ticker={self.Ticker}, Direction={self.Direction}, ' \
+        #        f'LimitPrice={str(self.LimitPrice)}, Volume={str(self.Volume)}, ' \
+        #        f'OrderStatus={self.OrderStatus}, OrderType={self.OrderType}, ' \
+        #        f'TradedPrice={str(self.TradedPrice)}, TradedVolume={str(self.TradedVolume)}, ' \
+        #        f'HedgeFlag={self.HedgeFlag}, OffsetFlag={self.OffsetFlag}, ' \
+        #        f'Remark={self.Remark}, BatchId={self.BatchId}, IsBatchOrder={self.IsBatchOrder}, ' \
+        #        f'CreateTime={str(self.CreateTime)}, UpdateTime={str(self.UpdateTime)},' \
+        #        f'CacheTime={str(self.CacheTime)}, FillingTime={str(self.FillingTime)})>'
+        return f'<OrderLogs, {str(self.to_dict())}>'
+
+    def __str__(self):
+        return str(self.to_dict())
 
 
 class Trade(Base):  # 定义一个类，继承Base
@@ -139,14 +151,11 @@ class Trade(Base):  # 定义一个类，继承Base
     BatchId = Column(String(64))
     CommissionAsset = Column(String(64))
 
+    def __str__(self):
+        return str(self.to_dict())
+
     def __repr__(self):
-        return f'<Trade(TradeId={self.TradeId}, ExternalId={self.ExternalId}, CreateTime={str(self.CreateTime)} ' \
-               f'Account={self.Account}, Trader={self.Trader}, ' \
-               f'Ticker={self.Ticker}, Direction={self.Direction}, ' \
-               f'TradedPrice={str(self.TradedPrice)}, TradedVolume={str(self.TradedVolume)}, ' \
-               f'Commission={str(self.Commission)}, CloseProfit={str(self.CloseProfit)}, ' \
-               f'HedgeFlag={self.HedgeFlag}, OffsetFlag={self.OffsetFlag}, ' \
-               f'Remark={self.Remark}, BatchId={self.BatchId}, CommissionAsset={self.CommissionAsset}'
+        return f'<Trade, {str(self.to_dict())}>'
 
 
 class TradeLogs(Base):  # 定义一个类，继承Base
@@ -170,14 +179,11 @@ class TradeLogs(Base):  # 定义一个类，继承Base
     BatchId = Column(String(64))
     CommissionAsset = Column(String(64))
 
+    def __str__(self):
+        return str(self.to_dict())
+
     def __repr__(self):
-        return f'<Trade(TradeId={self.TradeId}, ExternalId={self.ExternalId}, CreateTime={str(self.CreateTime)} ' \
-               f'Account={self.Account}, Trader={self.Trader}, ' \
-               f'Ticker={self.Ticker}, Direction={self.Direction}, ' \
-               f'TradedPrice={str(self.TradedPrice)}, TradedVolume={str(self.TradedVolume)}, ' \
-               f'Commission={str(self.Commission)}, CloseProfit={str(self.CloseProfit)}, ' \
-               f'HedgeFlag={self.HedgeFlag}, OffsetFlag={self.OffsetFlag}, ' \
-               f'Remark={self.Remark}, BatchId={self.BatchId}, CommissionAsset={self.CommissionAsset}'
+        return f'<TradeLogs, {str(self.to_dict())}>'
 
 
 class TraderPosition(Base):  # 定义一个类，继承Base
@@ -196,14 +202,11 @@ class TraderPosition(Base):  # 定义一个类，继承Base
     CreateTime = Column(DateTime)
     UpdateTime = Column(DateTime)
 
+    def __str__(self):
+        return str(self.to_dict())
+
     def __repr__(self):
-        return f'<TraderPosition(Account={self.Account}, Trader={self.Trader}, Ticker={self.Ticker}, ' \
-               f'LongVolume={str(self.LongVolume)}, LongVolumeToday={str(self.LongVolumeToday)}, ' \
-               f'LongPrice={str(self.LongPrice)}, ' \
-               f'ShortVolume={str(self.ShortVolume)}, ShortVolumeToday={str(self.ShortVolumeToday)}, ' \
-               f'ShortPrice={str(self.ShortPrice)}, ' \
-               f'CreateTime={str(self.CreateTime)}, UpdateTime={str(self.UpdateTime)}, ' \
-               f'HedgeFlag={str(self.HedgeFlag)}'
+        return f'<TraderPosition, {str(self.to_dict())}>'
 
 
 class OmsDbManagement:
@@ -229,14 +232,28 @@ class OmsDbManagement:
     def query_orders(self) -> List[Order]:
         return self.session.query(Order).all()
 
-    def query_order_logs(self, ):
-        return
+    def query_order_logs(self, n=1000):
+        return self.session.query(OrderLogs).order_by(desc(OrderLogs.CreateTime,))[:n-1]
 
     def query_trades(self):
-        return
+        return self.session.query(Trade).all()
 
-    def query_trade_logs(self):
-        return
+    def query_trade_logs(self, n=1000):
+        return self.session.query(TradeLogs).order_by(desc(TradeLogs.CreateTime,))[:n-1]
 
     def query_positions(self):
-        return
+        return self.session.query(TraderPosition).all()
+
+    @staticmethod
+    def data_to_csv(output, data: List[Order] or List[OrderLogs] or List[Trade] or List[TradeLogs or List[TraderPosition]]):
+        if not os.path.isdir(os.path.dirname(output)):
+            os.makedirs(os.path.dirname(output))
+        s_output = ''
+        if len(data) > 0:
+            data: List[dict] = [_.to_dict() for _ in data]
+            data.sort(key=lambda x: x['CreateTime'])
+            s_output += '\n'.join([','.join(
+                [str(v) for v in list(_.values())]) for _ in data])
+            s_output = ','.join(list(data[0].keys())) + '\n' + s_output
+        with open(output, 'w', encoding='utf-8') as f:
+            f.writelines(s_output)

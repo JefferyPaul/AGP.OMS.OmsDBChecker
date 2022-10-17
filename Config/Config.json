@@ -1,6 +1,6 @@
 {
     "db": {
-        "host": "127.0.0.1",
+        "host": "192.168.1.82",
         "user": "sa",
         "pwd": "Alpha2020",
         "db": "Platinum.Oms"
@@ -11,7 +11,6 @@
         ["133100", "160000"],
         ["210100", "230000"]
     ],
-    "unfilled_order_warning_gap": 180,
-    "warning_gap": 900,
+    "unfilled_order_warning_gap": 120,
     "loop_interval": 60
 }
