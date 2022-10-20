@@ -67,13 +67,15 @@ class OmsCheckerEngine(ScheduleRunner):
         return self._db
         
     def add_checker(self, checker):
-        checker.set_engine(self)
         self._checker.append(checker)
         if checker.item_name not in self._required_items:
             self._required_items.append(checker.item_name)
 
     # 数据获取，输出csv
     def _query_oms_data(self, is_output_file=True):
+        # 刷新 session 缓存，否则每次query都会先提取 缓存中已经有的数据，而db的对应行的值是可能会发生变化的，所以必须先刷新
+        self.db.session.commit()
+        #
         if OmsDbItems.Order in self._required_items:
             output_file = os.path.join(self.output_root, 'Order.csv')
             self._db_orders: List[Order] = self.db.query_orders()
@@ -128,15 +130,15 @@ class OmsCheckerEngine(ScheduleRunner):
         self.logger.info('\t线程已终止')
 
     def _ms_warning(self, ip, port, key, warning_value):
-        mc = MessageClient(ip=ip, port=port, logger=self.logger)
+        mc = MessageClient(ip=ip, port=port)
         key = key
         warning_value = warning_value
 
         def _warning(error: bool):
             if error:
-                mc.sendmessage(key=key,  message=warning_value + datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
+                mc.sendmessage(key=key,  message=warning_value + ' ' + datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
             else:
-                mc.sendmessage(key=key,  message='Checked' + datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
+                mc.sendmessage(key=key,  message='Checked' + ' ' + datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
         return _warning
 
     # 调用 warning board 弹框报错。
@@ -150,14 +152,18 @@ class OmsCheckerEngine(ScheduleRunner):
         def _run(warning_string):
             run_warning_board(warning_string, timeout_continue=6000)
 
-        #
+
+        # 检查弹框报错
+        _check_warning_thread()
+        # 没有新报错
         if not self._list_warning_string:
-            self._ms_warning_method(error=False)
+            if self._thread_warning:
+                self._ms_warning_method(error=True)
+            else:
+                self._ms_warning_method(error=False)
             return
         # MSWarning 报错
         self._ms_warning_method(error=True)
-        # 弹框报错
-        _check_warning_thread()
         # 检查弹框数超过限制
         if len(self._thread_warning) >= self._max_warning_board_count:
             for n in range(len(self._list_warning_string)):
@@ -180,6 +186,7 @@ class OmsCheckerEngine(ScheduleRunner):
 - 检查最新order，并打印，（间隔报错）
 - 检查
 """
+
 
 
 class OmsCheckerBase(metaclass=ABCMeta):
@@ -229,6 +236,7 @@ class OmsOrderBookLatestOrderChecker(OmsCheckerBase):
 
 class OmsOrderBookUnfilledOrderChecker(OmsCheckerBase):
     # Str_Subprocess_Run_SendWarning = 'call ./_OrderBookCheckedUnfilledOrderWarning.bat & exit'
+    """ 长时间未成交。需要2次确认，因为可能是因为oms db更新缓慢导致的"""
 
     def __init__(self, engine: OmsCheckerEngine, unfilled_order_warning_gap=60, output_root=''):
         super().__init__()
@@ -238,13 +246,14 @@ class OmsOrderBookUnfilledOrderChecker(OmsCheckerBase):
         # 将n秒前的未成交订单认定为 _unfilled_order
         self._unfilled_order_checking_gap = float(unfilled_order_warning_gap)
         # 已经检查过的 未成交订单。避免重复报错。
-        self._checked_unfilled_orders = []
+        self._checked_unfilled_orders: List[Order] = []
+        self._checked_unfilled_orders_warned: List[Order] = []
         if output_root:
-            self.unfilled_output_file = os.path.join(output_root, 'UnfilledOrderBooks.csv')
+            self.output_file = os.path.join(output_root, 'Checking_UnfilledOrders.csv')
             if not os.path.isdir(output_root):
                 os.makedirs(output_root)
         else:
-            self.unfilled_output_file = ''
+            self.output_file = ''
 
     # 检查OrderBook
     def check(self, data: List[Order]):
@@ -254,18 +263,43 @@ class OmsOrderBookUnfilledOrderChecker(OmsCheckerBase):
             if order.OrderStatus not in [4, 5]:
                 if (datetime.now() - order.CreateTime).seconds >= self._unfilled_order_checking_gap:
                     l_unfilled_order.append(order)
-        if self.unfilled_output_file:
-            self.engine.db.data_to_csv(self.unfilled_output_file, l_unfilled_order)
+
+        # 重新检查 order状态
+        self._checked_unfilled_orders: List[Order] = [_ for _ in self._checked_unfilled_orders if _ in l_unfilled_order]
+        for order in self._checked_unfilled_orders:
+            self.engine._db.session.refresh(order)
+        self._checked_unfilled_orders: List[Order] = [_ for _ in self._checked_unfilled_orders if _.OrderStatus not in [4 ,5]]
+
+        # 文件输出检查结果，未成交订单
+        if self.output_file and self._checked_unfilled_orders:
+            l_s_output = []
+            s_dt_now = datetime.now().strftime("%Y%m%d %H%M%S")
+            for unfilled_order in self._checked_unfilled_orders:
+                l_s_output.append(
+                    f'{s_dt_now},'
+                    f'{unfilled_order.Trader},'
+                    f'{unfilled_order.Account},'
+                    f'{unfilled_order.Ticker},'
+                    f'{str(unfilled_order.Direction)},'
+                    f'{str(unfilled_order.Volume)},'
+                    f'{unfilled_order.CreateTime.strftime("%Y%m%d %H%M%S")},'
+                    f'{str(unfilled_order)}')
+            with open(self.output_file, 'a+') as f:
+                f.writelines('\n'.join(l_s_output) + '\n')
+
+        # 未曾报错的order
+        l_unfilled_order_unwarned = [
+            _ for _ in self._checked_unfilled_orders if _ not in self._checked_unfilled_orders_warned]
+
         # 发送检查结果
         # subprocess.run(self.Str_Subprocess_Run_SendWarning, shell=True, stdout=subprocess.PIPE)
         # subprocess.Popen("call _SendWarning.bat", shell=True, stdout=None)
         # os.system('start /B "./_SendWarning.bat"')
         # os.system('ResultWarning.py -f "./Output/Warning_PreloadFirstSignal.csv" --mswarning -t')
 
-        # 检查是否有【新增的】未成交订单，报错
-        l_unfilled_order_new = [_ for _ in l_unfilled_order if _ not in self._checked_unfilled_orders]
-        if l_unfilled_order_new:
-            for order in l_unfilled_order_new:
+        # 弹框报错【新增的】未成交订单
+        if l_unfilled_order_unwarned:
+            for order in l_unfilled_order_unwarned:
                 self.engine.logger.warning(
                     f'此订单长时间未成交或撤单, '
                     f'{order.Trader}, {order.Ticker}, '
@@ -273,12 +307,18 @@ class OmsOrderBookUnfilledOrderChecker(OmsCheckerBase):
                     f'{str(order.Volume)}, {str(order.LimitPrice)}, '
                     f'{order.CreateTime.strftime("%Y-%m-%d %H:%M:%S")}'
                 )
+                self._checked_unfilled_orders_warned.append(order)
             # 弹框报警
             self.engine.send_warning('订单长时间未成交')
-            self._checked_unfilled_orders = l_unfilled_order
+
+        #
+        self._checked_unfilled_orders = l_unfilled_order
 
     def renew(self):
-        self._checked_unfilled_orders = []
+        self._checked_unfilled_orders_warned = []
+        if self.output_file:
+            with open(self.output_file, 'w') as f:
+                pass
 
 
 class OmsOrderBookRepeatedOrderChecker(OmsCheckerBase):
@@ -287,7 +327,7 @@ class OmsOrderBookRepeatedOrderChecker(OmsCheckerBase):
     eg: 一分钟内，同一标的挂单量超过10此
     """
 
-    def __init__(self, engine: OmsCheckerEngine, checking_time=60, max_order=10):
+    def __init__(self, engine: OmsCheckerEngine, checking_time=60, max_order=10, output_root=''):
         super().__init__()
         self.item_name = OmsDbItems.Order
         self._engine = engine
@@ -296,26 +336,87 @@ class OmsOrderBookRepeatedOrderChecker(OmsCheckerBase):
         self._checking_time = float(checking_time)
         self._max_order = float(max_order)
         #
-        self._last_checking_time = datetime.now()
+        self._last_checked_time = datetime.now()
+        self._last_checked_order: Order or None = None
         self._last_warning_order = []
+        # 输出检查结果
+        if output_root:
+            self.output_file = os.path.join(output_root, 'Checking_RepeatedOrders.csv')
+            if not os.path.isdir(output_root):
+                os.makedirs(output_root)
+        else:
+            self.output_file = ''
 
     def check(self, data: List[Order]):
-        checking_data = [_ for _ in data if _.CreateTime >
-                         (self._last_checking_time - timedelta(seconds=self._checking_time))]
+        # 筛选所需要检查的数据
+        latest_order = max(data, key=lambda x: x.CreateTime)
+        if latest_order == self._last_checked_order:
+            # 没有新数据
+            return
+        checking_data = [order for order in data if order.CreateTime >
+                         (latest_order.CreateTime - timedelta(seconds=self._checking_time))]
+        # 按 account ticker分组
         d_account_ticker_order = defaultdict(lambda: defaultdict(list))
         for order in checking_data:
             d_account_ticker_order[order.Account][order.Ticker].append(order)
-
-        l_warning_order = []
+        l_warning_infos: List[dict] = []
         for account in d_account_ticker_order.keys():
             for ticker, orders in d_account_ticker_order[account].items():
                 if len(orders) < self._max_order:
                     continue
                 else:
-                    l_warning_order.append((account, ticker))
-                    if (account, ticker) not in self._last_warning_order:
-                        self.engine.send_warning(f'{str(account)}, {str(ticker)}, 高频挂单')
-        self._last_warning_order = l_warning_order
+                    _first_order: Order = sorted(orders, key=lambda x: x.CreateTime)[0]
+                    _warning_info = {
+                        "Trader": _first_order.Trader,
+                        "Account": _first_order.Account,
+                        "Ticker": _first_order.Ticker,
+                        "OrdersCount": len(orders),
+                    }
+                    l_warning_infos.append(_warning_info)
+                    if _warning_info not in self._last_warning_order:
+                        self.engine.send_warning(f'{_first_order.Trader.split("@")[1]}, {str(ticker)}, 高频挂单')
+
+        # 输出检查结果
+        if self.output_file and l_warning_infos:
+            l_s_output = []
+            s_dt_now = datetime.now().strftime("%Y%m%d %H%M%S")
+            for _ in l_warning_infos:
+                l_s_output.append(
+                    f'{s_dt_now},'
+                    f'{_["Trader"]},'
+                    f'{_["Account"]},'
+                    f'{_["Ticker"]},'
+                    f'{str(_["OrdersCount"])}'
+                )
+            with open(self.output_file, 'a+') as f:
+                f.writelines('\n'.join(l_s_output) + '\n')
+        self._last_warning_order = l_warning_infos
+
+    def renew(self):
+        if self.output_file:
+            with open(self.output_file, 'w') as f:
+                pass
+
+
+class OmsTradeBookDataDownloadOnlyChecker(OmsCheckerBase):
+    def __init__(self):
+        self._engine = ''
+        self.item_name = OmsDbItems.Trade
+
+    def check(self, data):
+        pass
+
+    def renew(self):
+        pass
+
+
+class OmsPositionBookDataDownloadOnlyChecker(OmsCheckerBase):
+    def __init__(self):
+        self._engine = ''
+        self.item_name = OmsDbItems.Position
+
+    def check(self, data):
+        pass
 
     def renew(self):
         pass

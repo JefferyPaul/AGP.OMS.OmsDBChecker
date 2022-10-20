@@ -230,19 +230,19 @@ class OmsDbManagement:
         self.session.close()
 
     def query_orders(self) -> List[Order]:
-        return self.session.query(Order).all()
+        return self.session.query(Order).order_by(Order.CreateTime).all()
 
-    def query_order_logs(self, n=1000):
+    def query_order_logs(self, n=1000) -> List[OrderLogs]:
         return self.session.query(OrderLogs).order_by(desc(OrderLogs.CreateTime,))[:n-1]
 
-    def query_trades(self):
-        return self.session.query(Trade).all()
+    def query_trades(self) -> List[Trade]:
+        return self.session.query(Trade).order_by(Trade.CreateTime).all()
 
-    def query_trade_logs(self, n=1000):
+    def query_trade_logs(self, n=1000) -> List[TradeLogs]:
         return self.session.query(TradeLogs).order_by(desc(TradeLogs.CreateTime,))[:n-1]
 
-    def query_positions(self):
-        return self.session.query(TraderPosition).all()
+    def query_positions(self) -> List[TraderPosition]:
+        return self.session.query(TraderPosition).order_by(TraderPosition.CreateTime).all()
 
     @staticmethod
     def data_to_csv(output, data: List[Order] or List[OrderLogs] or List[Trade] or List[TradeLogs or List[TraderPosition]]):

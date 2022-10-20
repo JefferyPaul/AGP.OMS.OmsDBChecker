@@ -11,6 +11,8 @@
         ["133100", "160000"],
         ["210100", "230000"]
     ],
+    "loop_interval": 60,
     "unfilled_order_warning_gap": 120,
-    "loop_interval": 60
+    "repeated_order_checking_window": 60,
+    "max_repeated_order": 10
 }

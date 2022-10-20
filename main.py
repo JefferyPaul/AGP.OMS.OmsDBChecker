@@ -25,7 +25,9 @@ PATH_OUTPUT_ROOT = os.path.abspath(args.output)
 
 from OmsDBChecker import (
     OmsCheckerEngine,
-    OmsOrderBookLatestOrderChecker, OmsOrderBookRepeatedOrderChecker, OmsOrderBookUnfilledOrderChecker)
+    OmsOrderBookLatestOrderChecker, OmsOrderBookRepeatedOrderChecker, OmsOrderBookUnfilledOrderChecker,
+    OmsTradeBookDataDownloadOnlyChecker, OmsPositionBookDataDownloadOnlyChecker
+)
 from pyptools.pyptools_oms import OmsDbManagement, Order, Direction, OrderState
 from helper.simpleLogger import MyLogger
 
@@ -47,11 +49,11 @@ if __name__ == '__main__':
 
     # 读取db信息
     path_config = os.path.join(PATH_ROOT, 'Config', 'Config.json')
-    d_config = json.loads(open(path_config).read(), encoding='utf-8')
+    d_config = json.loads(open(path_config, encoding='utf-8').read(), encoding='utf-8')
     d_db_config = d_config['db']
     # 读取MSWarning信息
     path_mswarning_config = os.path.join(PATH_ROOT, 'Config', 'MSWarningConfig.json')
-    d_ms_warning_config = json.loads(open(path_mswarning_config).read(), encoding='utf-8')
+    d_ms_warning_config = json.loads(open(path_mswarning_config, encoding='utf-8').read(), encoding='utf-8')
 
     #
     oms_object = OmsDbManagement(**d_db_config)
@@ -62,9 +64,23 @@ if __name__ == '__main__':
         running_time=_change_datetime(d_config['running_time']),
         _logger=logger,
     )
-    engine.add_checker(OmsOrderBookLatestOrderChecker(engine))      # 最新order
-    engine.add_checker(OmsOrderBookRepeatedOrderChecker(engine))        # 重复下单
-    engine.add_checker(OmsOrderBookUnfilledOrderChecker(engine))      # 长时间未成交
+    # 获取打印 最新order
+    engine.add_checker(OmsOrderBookLatestOrderChecker(engine))
+    # 检查 高配重复下单
+    engine.add_checker(OmsOrderBookRepeatedOrderChecker(
+        engine, checking_time=d_config['repeated_order_checking_window'],
+        max_order=d_config['max_repeated_order'],
+        output_root=PATH_OUTPUT_ROOT
+    ))
+    # 检查 长时间未成交
+    engine.add_checker(OmsOrderBookUnfilledOrderChecker(
+        engine, unfilled_order_warning_gap=d_config['unfilled_order_warning_gap'],
+        output_root=PATH_OUTPUT_ROOT
+    ))
+    # # 不检查，下载 trade
+    # engine.add_checker(OmsTradeBookDataDownloadOnlyChecker())
+    # # 不检查，下载 position
+    # engine.add_checker(OmsPositionBookDataDownloadOnlyChecker())
 
     engine.start_loop()
 
